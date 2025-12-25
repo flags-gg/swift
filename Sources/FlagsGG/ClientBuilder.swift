@@ -71,9 +71,9 @@ public struct ClientBuilder: Sendable {
     }
 
     /// Build the client
-    /// - Returns: A configured Client instance
+    /// - Returns: A configured FlagsClient instance
     /// - Throws: FlagError if validation fails
-    public func build() throws -> Client {
+    public func build() throws -> FlagsClient {
         // Validate auth if provided
         if let auth = auth {
             if auth.projectId.trimmingCharacters(in: .whitespaces).isEmpty {
@@ -99,7 +99,7 @@ public struct ClientBuilder: Sendable {
 
         let cache = MemoryCache()
 
-        return Client(
+        return FlagsClient(
             baseURL: baseURL,
             maxRetries: maxRetries,
             auth: auth,

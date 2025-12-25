@@ -16,7 +16,7 @@ private struct CircuitState {
 /// A flag wrapper for fluent API
 public struct Flag {
     let name: String
-    let client: Client
+    let client: FlagsClient
 
     /// Check if the flag is enabled
     /// - Returns: True if the flag is enabled
@@ -25,11 +25,11 @@ public struct Flag {
     }
 }
 
-/// Type alias for Client to provide alternative naming
-public typealias Flags = Client
+/// Preferred type alias for FlagsClient
+public typealias Flags = FlagsClient
 
 /// Main client for interacting with Flags.gg
-public actor Client {
+public actor FlagsClient {
     private let baseURL: String
     private let maxRetries: UInt32
     private let auth: Auth?
