@@ -1,4 +1,4 @@
-# FlagsSwift
+# FlagsGG
 
 Swift library for [Flags.gg](https://flags.gg) - A feature flag management service.
 
@@ -191,7 +191,7 @@ See the `Examples/` directory for complete working examples:
 To run an example:
 
 ```bash
-cd flags-swift
+cd swift
 swift run Basic
 ```
 
@@ -242,5 +242,5 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 ## Support
 
 - Homepage: https://flags.gg
-- GitHub Issues: https://github.com/flags-gg/flags-swift/issues
+- GitHub Issues: https://github.com/flags-gg/swift/issues
 - Documentation: https://docs.flags.gg
