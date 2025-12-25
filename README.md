@@ -28,7 +28,7 @@ Add the following to your `Package.swift` file:
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/flags-gg/swift.git", from: "0.1.0")
+    .package(url: "https://github.com/flags-gg/swift.git", from: "1.0.1")
 ]
 ```
 
@@ -37,10 +37,10 @@ Or in Xcode, use File > Add Packages and enter the repository URL.
 ## Quick Start
 
 ```swift
-import FlagsSwift
+import FlagsGG
 
 // Initialize the client
-let client = try Client.builder()
+let flags = try Flags.builder()
     .withAuth(Auth(
         projectId: "your-project-id",
         agentId: "your-agent-id",
@@ -49,7 +49,7 @@ let client = try Client.builder()
     .build()
 
 // Check if a flag is enabled
-let isEnabled = await client.is("my-feature").enabled()
+let isEnabled = await flags.is("my-feature").enabled()
 
 if isEnabled {
     // Feature is enabled
@@ -62,25 +62,25 @@ if isEnabled {
 
 ```swift
 // Check a single flag
-let enabled = await client.is("my-feature").enabled()
+let enabled = await FlagsClient.is("my-feature").enabled()
 ```
 
 ### Batch Operations
 
 ```swift
 // Get multiple flags at once (more efficient than checking individually)
-let flags = await client.getMultiple(["feature-1", "feature-2", "feature-3"])
+let flags = await FlagsClient.getMultiple(["feature-1", "feature-2", "feature-3"])
 for (name, enabled) in flags {
     print("\(name): \(enabled)")
 }
 
 // Check if all flags are enabled
-if await client.allEnabled(["feature-1", "feature-2"]) {
+if await FlagsClient.allEnabled(["feature-1", "feature-2"]) {
     // All features are enabled
 }
 
 // Check if any flags are enabled
-if await client.anyEnabled(["premium", "beta"]) {
+if await FlagsClient.anyEnabled(["premium", "beta"]) {
     // At least one feature is enabled
 }
 ```
@@ -88,7 +88,7 @@ if await client.anyEnabled(["premium", "beta"]) {
 ### List All Flags
 
 ```swift
-let flags = try await client.list()
+let flags = try await FlagsClient.list()
 for flag in flags {
     print("\(flag.details.name): \(flag.enabled)")
 }
@@ -97,7 +97,7 @@ for flag in flags {
 ### Error Handling
 
 ```swift
-let client = try Client.builder()
+let client = try FlagsClient.builder()
     .withAuth(auth)
     .withErrorCallback { error in
         print("Flag error: \(error)")
@@ -109,7 +109,7 @@ let client = try Client.builder()
 ### Configuration
 
 ```swift
-let client = try Client.builder()
+let client = try FlagsClient.builder()
     .withAuth(auth)
     .withBaseURL("https://custom-api.example.com")
     .withMaxRetries(5)
@@ -146,7 +146,7 @@ Flag names are normalized, so these are all equivalent:
 You can use the client without API authentication to only use local flags:
 
 ```swift
-let client = try Client.builder().build()
+let client = try FlagsClient.builder().build()
 
 // Will only check FLAGS_* environment variables
 let enabled = await client.is("my-feature").enabled()
