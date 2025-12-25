@@ -25,6 +25,9 @@ public struct Flag {
     }
 }
 
+/// Type alias for Client to provide alternative naming
+public typealias Flags = Client
+
 /// Main client for interacting with Flags.gg
 public actor Client {
     private let baseURL: String
