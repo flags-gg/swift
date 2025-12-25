@@ -4,7 +4,7 @@
 import PackageDescription
 
 let package = Package(
-    name: "FlagsSwift",
+    name: "Flags.gg",
     platforms: [
         .macOS(.v13),
         .iOS(.v16),
@@ -13,16 +13,16 @@ let package = Package(
     ],
     products: [
         .library(
-            name: "FlagsSwift",
+            name: "Flags.gg",
             targets: ["FlagsSwift"]),
     ],
     dependencies: [],
     targets: [
         .target(
-            name: "FlagsSwift",
+            name: "Flags.gg",
             dependencies: []),
         .testTarget(
             name: "FlagsSwiftTests",
-            dependencies: ["FlagsSwift"]),
+            dependencies: ["Flags.gg"]),
     ]
 )
