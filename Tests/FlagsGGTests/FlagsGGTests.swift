@@ -31,7 +31,7 @@ final class FlagsGGTests: XCTestCase {
             environmentId: "dev"
         )
 
-        XCTAssertThrowsError(try Client.builder().withAuth(authWithEmptyProject).build()) { error in
+        XCTAssertThrowsError(try Flags.builder().withAuth(authWithEmptyProject).build()) { error in
             if case let FlagError.builderError(message) = error {
                 XCTAssertTrue(message.contains("Project ID"))
             } else {
@@ -46,7 +46,7 @@ final class FlagsGGTests: XCTestCase {
             environmentId: "dev"
         )
 
-        XCTAssertThrowsError(try Client.builder().withAuth(authWithEmptyAgent).build()) { error in
+        XCTAssertThrowsError(try Flags.builder().withAuth(authWithEmptyAgent).build()) { error in
             if case let FlagError.builderError(message) = error {
                 XCTAssertTrue(message.contains("Agent ID"))
             } else {
@@ -61,7 +61,7 @@ final class FlagsGGTests: XCTestCase {
             environmentId: "dev"
         )
 
-        XCTAssertThrowsError(try Client.builder().withAuth(auth).withMaxRetries(15).build()) { error in
+        XCTAssertThrowsError(try Flags.builder().withAuth(auth).withMaxRetries(15).build()) { error in
             if case let FlagError.builderError(message) = error {
                 XCTAssertTrue(message.contains("Max retries"))
             } else {
@@ -77,7 +77,7 @@ final class FlagsGGTests: XCTestCase {
             environmentId: "development"
         )
 
-        let client = try Client.builder()
+        let client = try Flags.builder()
             .withAuth(auth)
             .withMaxRetries(5)
             .build()
@@ -88,7 +88,7 @@ final class FlagsGGTests: XCTestCase {
 
     func testClientWithoutAuth() async throws {
         // Should succeed without auth (will only use local flags)
-        let client = try Client.builder().build()
+        let client = try Flags.builder().build()
 
         let debugInfo = await client.debugInfo()
         XCTAssertTrue(debugInfo.contains("https://api.flags.gg"))

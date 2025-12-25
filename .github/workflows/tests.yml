@@ -38,7 +38,7 @@ jobs:
           fi
       - name: metadata
         if: env.is_dependabot == 'true'
-        uses: dependabot/fetch/metadata@v2
+        uses: dependabot/fetch-metadata@v2
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
       - name: merge_patch
