@@ -1,7 +1,7 @@
 import XCTest
-@testable import FlagsSwift
+@testable import FlagsGG
 
-final class FlagsSwiftTests: XCTestCase {
+final class FlagsGGTests: XCTestCase {
     func testAuthCreation() {
         let auth = Auth(
             projectId: "test-project",

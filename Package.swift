@@ -13,16 +13,16 @@ let package = Package(
     ],
     products: [
         .library(
-            name: "Flags.gg",
-            targets: ["FlagsSwift"]),
+            name: "FlagsGG",
+            targets: ["FlagsGG"]),
     ],
     dependencies: [],
     targets: [
         .target(
-            name: "FlagsSwift",
+            name: "FlagsGG",
             dependencies: []),
         .testTarget(
-            name: "FlagsSwiftTests",
-            dependencies: ["FlagsSwift"]),
+            name: "FlagsGGTests",
+            dependencies: ["FlagsGG"]),
     ]
 )
