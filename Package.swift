@@ -19,10 +19,10 @@ let package = Package(
     dependencies: [],
     targets: [
         .target(
-            name: "Flags.gg",
+            name: "FlagsSwift",
             dependencies: []),
         .testTarget(
             name: "FlagsSwiftTests",
-            dependencies: ["Flags.gg"]),
+            dependencies: ["FlagsSwift"]),
     ]
 )
