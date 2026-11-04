@@ -1,4 +1,7 @@
 import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 
 /// API response structure
 private struct ApiResponse: Codable {
@@ -38,6 +41,7 @@ public actor FlagsClient {
     private var refreshInProgress: Bool = false
     private let errorCallback: (@Sendable (FlagError) -> Void)?
     private let urlSession: URLSession
+    private var targetingKey: String?
 
     internal init(
         baseURL: String,
@@ -45,8 +49,10 @@ public actor FlagsClient {
         auth: Auth?,
         cache: any Cache,
         errorCallback: (@Sendable (FlagError) -> Void)?,
-        urlSession: URLSession = .shared
+        urlSession: URLSession = .shared,
+        targetingKey: String? = nil
     ) {
+        self.targetingKey = targetingKey
         self.baseURL = baseURL
         self.maxRetries = maxRetries
         self.auth = auth
@@ -66,6 +72,17 @@ public actor FlagsClient {
     /// - Returns: A string with debug information
     public func debugInfo() -> String {
         return "Client { baseURL: \(baseURL), maxRetries: \(maxRetries), auth: \(String(describing: auth)) }"
+    }
+
+    /// Change who rollouts are evaluated for (e.g. after login) and re-fetch,
+    /// so cached values match the new user.
+    public func setTargetingKey(_ key: String?) async {
+        targetingKey = key
+        do {
+            try await refetch()
+        } catch {
+            handleError(.httpError(error))
+        }
     }
 
     /// Create a flag wrapper for fluent API
@@ -191,6 +208,7 @@ public actor FlagsClient {
         request.setValue(auth.projectId, forHTTPHeaderField: "X-Project-ID")
         request.setValue(auth.agentId, forHTTPHeaderField: "X-Agent-ID")
         request.setValue(auth.environmentId, forHTTPHeaderField: "X-Environment-ID")
+        request.setValue("rollout", forHTTPHeaderField: "X-Flags-Capabilities")
         request.timeoutInterval = 10
 
         let (data, response) = try await urlSession.data(for: request)
@@ -239,10 +257,12 @@ public actor FlagsClient {
                 // Reset failure count on success
                 circuitState.failureCount = 0
 
-                // Normalize flag names to lowercase
+                // Resolve rollouts on the name as the API sends it (the bucket must match
+                // every other SDK), then normalize flag names to lowercase
+                let key = targetingKey
                 let apiFlags = apiResp.flags.map { flag in
                     FeatureFlag(
-                        enabled: flag.enabled,
+                        enabled: flag.enabled && Rollout.inRollout(flag.details.name, key, flag.rollout),
                         details: Details(
                             name: flag.details.name.lowercased(),
                             id: flag.details.id
