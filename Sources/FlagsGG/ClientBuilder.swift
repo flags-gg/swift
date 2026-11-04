@@ -1,74 +1,51 @@
 import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 
 /// Builder for creating a Client instance
 public struct ClientBuilder: Sendable {
-    private let baseURL: String
-    private let maxRetries: UInt32
-    private let auth: Auth?
-    private let errorCallback: (@Sendable (FlagError) -> Void)?
+    private var baseURL: String = "https://api.flags.gg"
+    private var maxRetries: UInt32 = 3
+    private var auth: Auth?
+    private var errorCallback: (@Sendable (FlagError) -> Void)?
+    private var targetingKey: String?
+    private var context: [String: [String]] = [:]
+    private var urlSession: URLSession = .shared
 
-    private static let defaultBaseURL = "https://api.flags.gg"
-    private static let defaultMaxRetries: UInt32 = 3
+    internal init() {}
 
-    internal init(
-        baseURL: String = defaultBaseURL,
-        maxRetries: UInt32 = defaultMaxRetries,
-        auth: Auth? = nil,
-        errorCallback: (@Sendable (FlagError) -> Void)? = nil
-    ) {
-        self.baseURL = baseURL
-        self.maxRetries = maxRetries
-        self.auth = auth
-        self.errorCallback = errorCallback
+    private func with(_ change: (inout ClientBuilder) -> Void) -> ClientBuilder {
+        var copy = self
+        change(&copy)
+        return copy
     }
 
     /// Set the base URL for the API
-    /// - Parameter baseURL: The base URL
-    /// - Returns: A new builder with the base URL set
-    public func withBaseURL(_ baseURL: String) -> ClientBuilder {
-        return ClientBuilder(
-            baseURL: baseURL,
-            maxRetries: maxRetries,
-            auth: auth,
-            errorCallback: errorCallback
-        )
-    }
+    public func withBaseURL(_ baseURL: String) -> ClientBuilder { with { $0.baseURL = baseURL } }
 
     /// Set the maximum number of retries
-    /// - Parameter maxRetries: The maximum number of retries
-    /// - Returns: A new builder with max retries set
-    public func withMaxRetries(_ maxRetries: UInt32) -> ClientBuilder {
-        return ClientBuilder(
-            baseURL: baseURL,
-            maxRetries: maxRetries,
-            auth: auth,
-            errorCallback: errorCallback
-        )
-    }
+    public func withMaxRetries(_ maxRetries: UInt32) -> ClientBuilder { with { $0.maxRetries = maxRetries } }
 
     /// Set the authentication credentials
-    /// - Parameter auth: The authentication credentials
-    /// - Returns: A new builder with auth set
-    public func withAuth(_ auth: Auth) -> ClientBuilder {
-        return ClientBuilder(
-            baseURL: baseURL,
-            maxRetries: maxRetries,
-            auth: auth,
-            errorCallback: errorCallback
-        )
-    }
+    public func withAuth(_ auth: Auth) -> ClientBuilder { with { $0.auth = auth } }
 
     /// Set a callback for error handling
-    /// - Parameter callback: A closure that will be called when errors occur
-    /// - Returns: A new builder with error callback set
     public func withErrorCallback(_ callback: @escaping @Sendable (FlagError) -> Void) -> ClientBuilder {
-        return ClientBuilder(
-            baseURL: baseURL,
-            maxRetries: maxRetries,
-            auth: auth,
-            errorCallback: callback
-        )
+        with { $0.errorCallback = callback }
     }
+
+    /// Who percentage rollouts are evaluated for, e.g. the signed-in user's id.
+    /// Defaults to a stable per-install id (`Rollout.installId()`), so each phone keeps its answer.
+    public func withTargetingKey(_ key: String?) -> ClientBuilder { with { $0.targetingKey = key } }
+
+    /// Attributes for targeting rules, evaluated by the server, e.g. ["email": [email], "groups": ["beta"]].
+    public func withContext(_ attributes: [String: [String]]) -> ClientBuilder { with { $0.context = attributes } }
+
+    /// Single-valued attributes for targeting rules, e.g. ["email": email, "plan": "pro"].
+    public func withContext(_ attributes: [String: String]) -> ClientBuilder { withContext(attributes.mapValues { [$0] }) }
+
+    internal func withURLSession(_ session: URLSession) -> ClientBuilder { with { $0.urlSession = session } }
 
     /// Build the client
     /// - Returns: A configured FlagsClient instance
@@ -97,14 +74,15 @@ public struct ClientBuilder: Sendable {
             throw FlagError.builderError("Max retries cannot exceed 10")
         }
 
-        let cache = MemoryCache()
-
         return FlagsClient(
             baseURL: baseURL,
             maxRetries: maxRetries,
             auth: auth,
-            cache: cache,
-            errorCallback: errorCallback
+            cache: MemoryCache(),
+            errorCallback: errorCallback,
+            urlSession: urlSession,
+            targetingKey: targetingKey ?? Rollout.installId(),
+            context: context
         )
     }
 }

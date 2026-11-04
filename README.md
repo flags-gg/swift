@@ -119,6 +119,36 @@ let client = try FlagsClient.builder()
     .build()
 ```
 
+## Percentage Rollouts
+
+A flag can be rolled out to a percentage of users per environment, e.g. 10% of phones. Each install keeps the same answer: by default the SDK uses a random id stored in `UserDefaults` (`Rollout.installId()`). To keep a user's answer the same across their devices, pass their id:
+
+```swift
+let client = try FlagsClient.builder()
+    .withAuth(auth)
+    .withTargetingKey(user?.id) // nil falls back to the install id
+    .build()
+
+// later, e.g. after login
+await client.setTargetingKey(user.id)
+```
+
+`isEnabled` already accounts for the rollout. The bucket is FNV-1a 32 of `"<flag>:<key>" % 100`, the same as the API and every other SDK.
+
+## Targeting Rules
+
+Flags can be turned on or off for specific users, groups or segments with rules set in the dashboard. Pass the user's attributes. The server evaluates the rules, so rule values never reach the device:
+
+```swift
+let client = try FlagsClient.builder()
+    .withAuth(auth)
+    .withTargetingKey(user.id)
+    .withContext(["email": [user.email], "plan": [user.plan], "groups": user.groups])
+    .build()
+
+await client.setContext(["plan": ["pro"]]) // e.g. after an upgrade; re-fetches
+```
+
 ## Local Flag Overrides
 
 You can override remote flags using environment variables prefixed with `FLAGS_`. This is useful for testing and development.
