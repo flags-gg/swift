@@ -8,11 +8,13 @@ import FoundationNetworking
 final class MockFlagsProtocol: URLProtocol, @unchecked Sendable {
     nonisolated(unsafe) static var body = Data()
     nonisolated(unsafe) static var capabilities: String?
+    nonisolated(unsafe) static var context: String?
 
     override class func canInit(with request: URLRequest) -> Bool { true }
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
     override func startLoading() {
         Self.capabilities = request.value(forHTTPHeaderField: "X-Flags-Capabilities")
+        Self.context = request.value(forHTTPHeaderField: "X-Flags-Context")
         let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: ["Content-Type": "application/json"])!
         client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
         client?.urlProtocol(self, didLoad: Self.body)
@@ -44,6 +46,14 @@ final class RolloutTests: XCTestCase {
         XCTAssertFalse(Rollout.inRollout("new-checkout", "user-1", 0))
     }
 
+    func testEncodesUserForTargetingRules() throws {
+        let encoded = Rollout.encodeContext("u-1", ["email": ["ana@acme.com"], "groups": ["beta", "ünï"]])
+        let data = try XCTUnwrap(Data(base64Encoded: encoded))
+        let decoded = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        XCTAssertEqual(decoded["key"] as? String, "u-1")
+        XCTAssertEqual(decoded["groups"] as? [String], ["beta", "ünï"])
+    }
+
     func testInstallIdIsStable() throws {
         let defaults = try XCTUnwrap(UserDefaults(suiteName: "flagsgg-tests-\(UUID().uuidString)"))
         let first = Rollout.installId(defaults)
@@ -65,6 +75,7 @@ final class RolloutTests: XCTestCase {
         let inRollout = await client.isEnabled("New-Checkout")
         XCTAssertTrue(inRollout)
         XCTAssertEqual(MockFlagsProtocol.capabilities, "rollout")
+        XCTAssertNotNil(MockFlagsProtocol.context)
 
         await client.setTargetingKey("user-2") // bucket 82: out
         let afterSwitch = await client.isEnabled("new-checkout")

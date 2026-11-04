@@ -20,6 +20,14 @@ public enum Rollout {
         return bucket(flagName, key) < pct
     }
 
+    /// The user as the server's targeting rules see it: base64 of UTF-8 JSON, with the targeting key as "key".
+    public static func encodeContext(_ targetingKey: String?, _ context: [String: [String]]) -> String {
+        var object: [String: Any] = context.mapValues { $0 as Any }
+        if let key = targetingKey, !key.isEmpty { object["key"] = key }
+        let data = (try? JSONSerialization.data(withJSONObject: object, options: [.sortedKeys])) ?? Data("{}".utf8)
+        return data.base64EncodedString()
+    }
+
     private static let installIdKey = "flagsgg.install-id"
 
     /// A stable id for this install, kept in UserDefaults, so "x% of phones" works without a user id.

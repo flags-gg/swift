@@ -135,6 +135,20 @@ await client.setTargetingKey(user.id)
 
 `isEnabled` already accounts for the rollout. The bucket is FNV-1a 32 of `"<flag>:<key>" % 100`, the same as the API and every other SDK.
 
+## Targeting Rules
+
+Flags can be turned on or off for specific users, groups or segments with rules set in the dashboard. Pass the user's attributes. The server evaluates the rules, so rule values never reach the device:
+
+```swift
+let client = try FlagsClient.builder()
+    .withAuth(auth)
+    .withTargetingKey(user.id)
+    .withContext(["email": [user.email], "plan": [user.plan], "groups": user.groups])
+    .build()
+
+await client.setContext(["plan": ["pro"]]) // e.g. after an upgrade; re-fetches
+```
+
 ## Local Flag Overrides
 
 You can override remote flags using environment variables prefixed with `FLAGS_`. This is useful for testing and development.

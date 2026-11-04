@@ -42,6 +42,7 @@ public actor FlagsClient {
     private let errorCallback: (@Sendable (FlagError) -> Void)?
     private let urlSession: URLSession
     private var targetingKey: String?
+    private var context: [String: [String]]
 
     internal init(
         baseURL: String,
@@ -50,9 +51,11 @@ public actor FlagsClient {
         cache: any Cache,
         errorCallback: (@Sendable (FlagError) -> Void)?,
         urlSession: URLSession = .shared,
-        targetingKey: String? = nil
+        targetingKey: String? = nil,
+        context: [String: [String]] = [:]
     ) {
         self.targetingKey = targetingKey
+        self.context = context
         self.baseURL = baseURL
         self.maxRetries = maxRetries
         self.auth = auth
@@ -78,6 +81,16 @@ public actor FlagsClient {
     /// so cached values match the new user.
     public func setTargetingKey(_ key: String?) async {
         targetingKey = key
+        do {
+            try await refetch()
+        } catch {
+            handleError(.httpError(error))
+        }
+    }
+
+    /// Replace the attributes targeting rules see (e.g. email, plan, groups) and re-fetch.
+    public func setContext(_ attributes: [String: [String]]) async {
+        context = attributes
         do {
             try await refetch()
         } catch {
@@ -209,6 +222,7 @@ public actor FlagsClient {
         request.setValue(auth.agentId, forHTTPHeaderField: "X-Agent-ID")
         request.setValue(auth.environmentId, forHTTPHeaderField: "X-Environment-ID")
         request.setValue("rollout", forHTTPHeaderField: "X-Flags-Capabilities")
+        request.setValue(Rollout.encodeContext(targetingKey, context), forHTTPHeaderField: "X-Flags-Context")
         request.timeoutInterval = 10
 
         let (data, response) = try await urlSession.data(for: request)

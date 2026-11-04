@@ -10,6 +10,7 @@ public struct ClientBuilder: Sendable {
     private var auth: Auth?
     private var errorCallback: (@Sendable (FlagError) -> Void)?
     private var targetingKey: String?
+    private var context: [String: [String]] = [:]
     private var urlSession: URLSession = .shared
 
     internal init() {}
@@ -37,6 +38,12 @@ public struct ClientBuilder: Sendable {
     /// Who percentage rollouts are evaluated for, e.g. the signed-in user's id.
     /// Defaults to a stable per-install id (`Rollout.installId()`), so each phone keeps its answer.
     public func withTargetingKey(_ key: String?) -> ClientBuilder { with { $0.targetingKey = key } }
+
+    /// Attributes for targeting rules, evaluated by the server, e.g. ["email": [email], "groups": ["beta"]].
+    public func withContext(_ attributes: [String: [String]]) -> ClientBuilder { with { $0.context = attributes } }
+
+    /// Single-valued attributes for targeting rules, e.g. ["email": email, "plan": "pro"].
+    public func withContext(_ attributes: [String: String]) -> ClientBuilder { withContext(attributes.mapValues { [$0] }) }
 
     internal func withURLSession(_ session: URLSession) -> ClientBuilder { with { $0.urlSession = session } }
 
@@ -74,7 +81,8 @@ public struct ClientBuilder: Sendable {
             cache: MemoryCache(),
             errorCallback: errorCallback,
             urlSession: urlSession,
-            targetingKey: targetingKey ?? Rollout.installId()
+            targetingKey: targetingKey ?? Rollout.installId(),
+            context: context
         )
     }
 }
