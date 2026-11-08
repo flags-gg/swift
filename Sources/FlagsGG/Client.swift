@@ -38,7 +38,7 @@ public actor FlagsClient {
     private let auth: Auth?
     private let cache: any Cache
     private var circuitState: CircuitState
-    private var refreshInProgress: Bool = false
+    private var inflight: Task<Void, Error>?
     private let errorCallback: (@Sendable (FlagError) -> Void)?
     private let urlSession: URLSession
     private var targetingKey: String?
@@ -63,7 +63,18 @@ public actor FlagsClient {
         self.circuitState = CircuitState()
         self.errorCallback = errorCallback
         self.urlSession = urlSession
+
+        // Fetch now, then check every 30s whether the server's refresh interval has passed (like the Kotlin SDK).
+        // The loop holds the client weakly and stops once it's released.
+        Task { [weak self] in
+            while self != nil {
+                await self?.refreshIfStale()
+                try? await Task.sleep(nanoseconds: FlagsClient.refreshCheckInterval)
+            }
+        }
     }
+
+    static let refreshCheckInterval: UInt64 = 30_000_000_000
 
     /// Create a client builder
     /// - Returns: A new ClientBuilder instance
@@ -111,18 +122,7 @@ public actor FlagsClient {
     public func isEnabled(_ name: String) async -> Bool {
         let normalizedName = name.lowercased()
 
-        // Check if cache needs refresh
-        if await cache.shouldRefreshCache() {
-            if !refreshInProgress {
-                refreshInProgress = true
-                do {
-                    try await refetch()
-                } catch {
-                    handleError(.httpError(error))
-                }
-                refreshInProgress = false
-            }
-        }
+        await refreshIfStale()
 
         // Check cache
         do {
@@ -136,18 +136,7 @@ public actor FlagsClient {
     /// List all flags
     /// - Returns: Array of all feature flags
     public func list() async throws -> [FeatureFlag] {
-        // Check if cache needs refresh
-        if await cache.shouldRefreshCache() {
-            if !refreshInProgress {
-                refreshInProgress = true
-                do {
-                    try await refetch()
-                } catch {
-                    handleError(.httpError(error))
-                }
-                refreshInProgress = false
-            }
-        }
+        await refreshIfStale()
 
         return try await cache.getAll()
     }
@@ -156,18 +145,7 @@ public actor FlagsClient {
     /// - Parameter names: Array of flag names
     /// - Returns: Dictionary mapping flag names to their enabled status
     public func getMultiple(_ names: [String]) async -> [String: Bool] {
-        // Check if cache needs refresh
-        if await cache.shouldRefreshCache() {
-            if !refreshInProgress {
-                refreshInProgress = true
-                do {
-                    try await refetch()
-                } catch {
-                    handleError(.httpError(error))
-                }
-                refreshInProgress = false
-            }
-        }
+        await refreshIfStale()
 
         var results: [String: Bool] = [:]
 
@@ -202,6 +180,24 @@ public actor FlagsClient {
 
         let flags = await getMultiple(names)
         return names.contains { flags[$0] == true }
+    }
+
+    /// Fetch if the server's refresh interval has passed. Concurrent callers share one fetch, so a check made
+    /// while the first fetch is running waits for it rather than reading an empty cache.
+    private func refreshIfStale() async {
+        guard await cache.shouldRefreshCache() else { return }
+        if let inflight {
+            _ = try? await inflight.value
+            return
+        }
+        let task = Task { try await self.refetch() }
+        inflight = task
+        defer { inflight = nil }
+        do {
+            try await task.value
+        } catch {
+            handleError(.httpError(error))
+        }
     }
 
     private func handleError(_ error: FlagError) {
@@ -284,30 +280,13 @@ public actor FlagsClient {
                     )
                 }
 
-                let localFlags = buildLocal()
-
-                // Combine API flags and local flags, with local overriding API
-                var combinedFlags: [FeatureFlag] = []
-                var localFlagsMap = Dictionary(uniqueKeysWithValues: localFlags.map { ($0.details.name, $0) })
-
-                for apiFlag in apiFlags {
-                    if let localFlag = localFlagsMap.removeValue(forKey: apiFlag.details.name) {
-                        combinedFlags.append(localFlag)
-                    } else {
-                        combinedFlags.append(apiFlag)
-                    }
-                }
-
-                // Add remaining local flags
-                combinedFlags.append(contentsOf: localFlagsMap.values)
-
-                try await cache.refresh(combinedFlags, intervalAllowed: apiResp.intervalAllowed)
+                try await cache.refresh(withLocal(apiFlags), intervalAllowed: apiResp.intervalAllowed)
                 return
             } catch {
                 lastError = error
                 if attempt < maxAttempts {
                     handleError(.httpError(error))
-                    try await Task.sleep(nanoseconds: UInt64(100_000_000 * attempt))
+                    try await Task.sleep(nanoseconds: UInt64(1_000_000_000) * UInt64(attempt))
                     continue
                 }
 
@@ -317,9 +296,10 @@ public actor FlagsClient {
 
                 handleError(.httpError(error))
 
-                // Refresh with local flags
-                let localFlags = buildLocal()
-                try await cache.refresh(localFlags, intervalAllowed: 60)
+                // Keep the last fetched values (like the Kotlin SDK) rather than turning every remote flag off;
+                // retry in 60s
+                let lastKnown = (try? await cache.getAll()) ?? []
+                try await cache.refresh(withLocal(lastKnown), intervalAllowed: 60)
 
                 throw error
             }
@@ -330,6 +310,14 @@ public actor FlagsClient {
         }
     }
 
+    /// Env (FLAGS_*) flags override flags of the same name; env-only flags are added.
+    private func withLocal(_ flags: [FeatureFlag]) -> [FeatureFlag] {
+        var local = Dictionary(buildLocal().map { ($0.details.name, $0) }, uniquingKeysWith: { a, _ in a })
+        var combined = flags.map { local.removeValue(forKey: $0.details.name) ?? $0 }
+        combined.append(contentsOf: local.values)
+        return combined
+    }
+
     private func buildLocal() -> [FeatureFlag] {
         var result: [FeatureFlag] = []
         let env = ProcessInfo.processInfo.environment
@@ -337,7 +325,7 @@ public actor FlagsClient {
         for (key, value) in env {
             guard key.hasPrefix("FLAGS_") else { continue }
 
-            let enabled = value == "true"
+            let enabled = ["true", "1", "on", "yes", "enabled"].contains(value.trimmingCharacters(in: .whitespaces).lowercased())
             let flagNameEnv = String(key.dropFirst("FLAGS_".count))
             let flagNameLower = flagNameEnv.lowercased()
 

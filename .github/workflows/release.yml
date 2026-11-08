@@ -1,0 +1,63 @@
+name: Release
+
+# SwiftPM releases are git tags, so FlagsGG.version must be set before tagging, not after.
+# Run this instead of publishing the drafted release by hand.
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version to release, e.g. 1.1.0. Empty uses the release drafter's draft.
+        required: false
+
+permissions:
+  contents: write
+
+jobs:
+  test:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run tests
+        run: swift test
+
+  release:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: Resolve version
+        env:
+          GH_TOKEN: ${{ github.token }}
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          VERSION="${INPUT_VERSION:-$(gh release list --json tagName,isDraft --jq '[.[] | select(.isDraft)][0].tagName // ""')}"
+          VERSION="${VERSION#v}"
+          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::No valid version (got '$VERSION'). Pass one, or let the release drafter create a draft first."
+            exit 1
+          fi
+          if gh release view "v$VERSION" --json isDraft --jq '.isDraft' 2>/dev/null | grep -q false; then
+            echo "::error::v$VERSION is already released."
+            exit 1
+          fi
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+      - name: Set FlagsGG.version
+        run: |
+          sed -i -E "s/(public static let version = )\"[^\"]*\"/\1\"$VERSION\"/" Sources/FlagsGG/FlagsGG.swift
+          grep -q "public static let version = \"$VERSION\"" Sources/FlagsGG/FlagsGG.swift
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -am "chore: release $VERSION" || echo "Version already $VERSION"
+          git push origin main
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          DRAFT="$(gh release list --json tagName,isDraft --jq '[.[] | select(.isDraft)][0].tagName // ""')"
+          if [ -n "$DRAFT" ]; then
+            gh release edit "$DRAFT" --tag "v$VERSION" --title "v$VERSION" --target "$(git rev-parse HEAD)" --draft=false
+          else
+            gh release create "v$VERSION" --target "$(git rev-parse HEAD)" --title "v$VERSION" --generate-notes
+          fi
