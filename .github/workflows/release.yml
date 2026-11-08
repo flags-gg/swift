@@ -44,13 +44,13 @@ jobs:
           fi
           echo "VERSION=$VERSION" >> "$GITHUB_ENV"
       - name: Set FlagsGG.version
-        run: |
-          sed -i -E "s/(public static let version = )\"[^\"]*\"/\1\"$VERSION\"/" Sources/FlagsGG/FlagsGG.swift
-          grep -q "public static let version = \"$VERSION\"" Sources/FlagsGG/FlagsGG.swift
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git commit -am "chore: release $VERSION" || echo "Version already $VERSION"
-          git push origin main
+        uses: keloran/version-bump@main
+        with:
+          version: ${{ env.VERSION }}
+          commit: 'true'
+          commit-message: 'chore: release {version}'
+      - name: Push version commit
+        run: git push origin main
       - name: Publish release
         env:
           GH_TOKEN: ${{ github.token }}
