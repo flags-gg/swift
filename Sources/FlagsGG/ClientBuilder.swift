@@ -12,6 +12,8 @@ public struct ClientBuilder: Sendable {
     private var targetingKey: String?
     private var context: [String: [String]] = [:]
     private var urlSession: URLSession = .shared
+    private var cache: (any Cache)?
+    private var sqlitePath: String?
 
     internal init() {}
 
@@ -45,6 +47,19 @@ public struct ClientBuilder: Sendable {
     /// Single-valued attributes for targeting rules, e.g. ["email": email, "plan": "pro"].
     public func withContext(_ attributes: [String: String]) -> ClientBuilder { withContext(attributes.mapValues { [$0] }) }
 
+    /// Use your own cache implementation.
+    public func withCache(_ cache: any Cache) -> ClientBuilder { with { $0.cache = cache; $0.sqlitePath = nil } }
+
+    /// Keep flags in memory only (the default).
+    public func withMemoryCache() -> ClientBuilder { with { $0.cache = MemoryCache(); $0.sqlitePath = nil } }
+
+    #if canImport(SQLite3)
+    /// Keep flags in a SQLite file, so the last fetched values survive an app restart.
+    public func withSQLiteCache(path: String = "flags_cache.db") -> ClientBuilder {
+        with { $0.sqlitePath = path; $0.cache = nil }
+    }
+    #endif
+
     internal func withURLSession(_ session: URLSession) -> ClientBuilder { with { $0.urlSession = session } }
 
     /// Build the client
@@ -74,11 +89,17 @@ public struct ClientBuilder: Sendable {
             throw FlagError.builderError("Max retries cannot exceed 10")
         }
 
+        #if canImport(SQLite3)
+        let finalCache: any Cache = try sqlitePath.map { try SQLiteCache(path: $0) } ?? cache ?? MemoryCache()
+        #else
+        let finalCache: any Cache = cache ?? MemoryCache()
+        #endif
+
         return FlagsClient(
             baseURL: baseURL,
             maxRetries: maxRetries,
             auth: auth,
-            cache: MemoryCache(),
+            cache: finalCache,
             errorCallback: errorCallback,
             urlSession: urlSession,
             targetingKey: targetingKey ?? Rollout.installId(),

@@ -9,13 +9,14 @@ final class MockFlagsProtocol: URLProtocol, @unchecked Sendable {
     nonisolated(unsafe) static var body = Data()
     nonisolated(unsafe) static var capabilities: String?
     nonisolated(unsafe) static var context: String?
+    nonisolated(unsafe) static var status = 200
 
     override class func canInit(with request: URLRequest) -> Bool { true }
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
     override func startLoading() {
         Self.capabilities = request.value(forHTTPHeaderField: "X-Flags-Capabilities")
         Self.context = request.value(forHTTPHeaderField: "X-Flags-Context")
-        let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: ["Content-Type": "application/json"])!
+        let response = HTTPURLResponse(url: request.url!, statusCode: Self.status, httpVersion: nil, headerFields: ["Content-Type": "application/json"])!
         client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
         client?.urlProtocol(self, didLoad: Self.body)
         client?.urlProtocolDidFinishLoading(self)
@@ -81,4 +82,61 @@ final class RolloutTests: XCTestCase {
         let afterSwitch = await client.isEnabled("new-checkout")
         XCTAssertFalse(afterSwitch)
     }
+
+    func testKeepsLastValuesWhenAPIIsDown() async throws {
+        MockFlagsProtocol.status = 200
+        MockFlagsProtocol.body = Data(#"{"intervalAllowed":60,"flags":[{"enabled":true,"details":{"name":"dark-mode","id":"1"}}]}"#.utf8)
+        defer { MockFlagsProtocol.status = 200 }
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [MockFlagsProtocol.self]
+
+        let client = try FlagsClient.builder()
+            .withAuth(Auth(projectId: "p", agentId: "a", environmentId: "e"))
+            .withURLSession(URLSession(configuration: config))
+            .withMaxRetries(1)
+            .build()
+
+        let before = await client.isEnabled("dark-mode")
+        XCTAssertTrue(before)
+
+        MockFlagsProtocol.status = 500
+        await client.setContext(["plan": ["pro"]]) // re-fetch fails
+        let during = await client.isEnabled("dark-mode")
+        XCTAssertTrue(during)
+    }
+
+    func testEnvOverridesAcceptTruthyValues() async throws {
+        setenv("FLAGS_YES_FLAG", "Yes", 1)
+        setenv("FLAGS_ONE_FLAG", "1", 1)
+        setenv("FLAGS_OFF_FLAG", "off", 1)
+        defer { for name in ["FLAGS_YES_FLAG", "FLAGS_ONE_FLAG", "FLAGS_OFF_FLAG"] { unsetenv(name) } }
+
+        let client = try FlagsClient.builder().build() // no auth: env flags only
+        let yes = await client.isEnabled("yes-flag")
+        let one = await client.isEnabled("One Flag")
+        let off = await client.isEnabled("off_flag")
+        XCTAssertTrue(yes)
+        XCTAssertTrue(one)
+        XCTAssertFalse(off)
+    }
+
+    #if canImport(SQLite3)
+    func testSQLiteCacheSurvivesRestart() async throws {
+        let path = FileManager.default.temporaryDirectory.appendingPathComponent("flags-\(UUID().uuidString).db").path
+        defer { try? FileManager.default.removeItem(atPath: path) }
+
+        let first = try SQLiteCache(path: path)
+        try await first.refresh([FeatureFlag(enabled: true, details: Details(name: "dark-mode", id: "1"))], intervalAllowed: 60)
+        let fresh = await first.shouldRefreshCache()
+        XCTAssertFalse(fresh)
+
+        let reopened = try SQLiteCache(path: path)
+        let flag = try await reopened.get("dark-mode")
+        XCTAssertTrue(flag.enabled && flag.exists)
+        let missing = try await reopened.get("nope")
+        XCTAssertFalse(missing.exists)
+        let all = try await reopened.getAll()
+        XCTAssertEqual(all.map(\.details.id), ["1"])
+    }
+    #endif
 }

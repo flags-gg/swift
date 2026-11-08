@@ -113,11 +113,14 @@ let client = try FlagsClient.builder()
     .withAuth(auth)
     .withBaseURL("https://custom-api.example.com")
     .withMaxRetries(5)
+    .withSQLiteCache(path: cachePath) // optional: keep the last values across restarts (default: memory)
     .withErrorCallback { error in
         // Handle errors
     }
     .build()
 ```
+
+Flags are fetched when the client is built, then re-fetched whenever the server's refresh interval has passed (checked every 30 seconds). If the API is down, the last fetched values are kept.
 
 ## Percentage Rollouts
 
