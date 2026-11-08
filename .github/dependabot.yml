@@ -8,3 +8,9 @@ updates:
       include: scope
     schedule:
       interval: daily
+  - package-ecosystem: github-actions
+    directory: /
+    commit-message:
+      prefix: ci
+    schedule:
+      interval: weekly
